@@ -13,10 +13,7 @@ size_t n;
 
 void sendpx(int fd, int x, int y, const char *color)
 {
-	char *str;
-	n = asprintf(&str, "PX %3d %3d %s\n", x, y, color);
-	write(fd, str, n);
-	free(str);
+	dprintf(fd, "PX %d %d %s\n", x, y, color);
 }
 
 void sendblock(int fd, int x, int y, int xlen, int ylen, const char *color)
