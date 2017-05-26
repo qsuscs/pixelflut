@@ -56,13 +56,19 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+	int width = 333;
+	int height = 206;
+	int b_height = height / 6;
+	int xs = 1200;
+	int ys = 600;
+
 	while (1) {
-		sendblock(sockfd, 0, 0, 333, 35, "E40303");
-		sendblock(sockfd, 0, 36, 333, 35, "FF8C00");
-		sendblock(sockfd, 0, 71, 333, 35, "FFED00");
-		sendblock(sockfd, 0, 106, 333, 35, "008026");
-		sendblock(sockfd, 0, 141, 333, 35, "004DFF");
-		sendblock(sockfd, 0, 176, 333, 35, "750787");
+		sendblock(sockfd, xs, ys, width, b_height, "E40303");
+		sendblock(sockfd, xs, ys+b_height, width, b_height, "FF8C00");
+		sendblock(sockfd, xs, ys+b_height*2, width, b_height, "FFED00");
+		sendblock(sockfd, xs, ys+b_height*3, width, b_height, "008026");
+		sendblock(sockfd, xs, ys+b_height*4, width, b_height, "004DFF");
+		sendblock(sockfd, xs, ys+b_height*5, width, b_height, "750787");
 	}
 
 	close(sockfd);
