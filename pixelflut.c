@@ -62,6 +62,7 @@ int main(int argc, char *argv[])
 	int xs = 1200;
 	int ys = 600;
 
+	sendblock(sockfd, xs, ys, width, height, "000000");
 	while (1) {
 		sendblock(sockfd, xs, ys, width, b_height, "E40303");
 		sendblock(sockfd, xs, ys+b_height, width, b_height, "FF8C00");
