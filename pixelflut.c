@@ -18,8 +18,8 @@ void sendpx(int fd, int x, int y, const char *color)
 
 void sendblock(int fd, int x, int y, int xlen, int ylen, const char *color)
 {
-	for (int i = x; i < xlen + x; i++) {
-		for (int j = y; j < ylen + y; j++) {
+	for (int j = y; j < ylen + y; j++) {
+		for (int i = x; i < xlen + x; i++) {
 			sendpx(fd, i, j, color);
 		}
 	}
