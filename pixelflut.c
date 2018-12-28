@@ -8,6 +8,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <signal.h>
 
 size_t n;
 
@@ -56,20 +57,68 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	int width = 333;
-	int height = 206;
+//	signal(SIGPIPE, SIG_IGN);
+
+	int width = 777;
+	int height = 480;
 	int b_height = height / 6;
 	int xs = 1200;
 	int ys = 600;
 
+	char *buf = calloc(1 + width * height * snprintf(NULL, 0, "PX %d %d 000000\n", xs + width, ys + height), sizeof(char));
+	if (buf == NULL) {
+		fprintf(stderr, "Could not allocate memory\n");
+		exit(1);
+	}
+	char *buf_orig = buf;
+	int n = 8;
+	for (int ix = 0; ix < n; ix++) {
+		int s, x, y;
+		char *str = NULL;
+		for (x = xs + ix; x < xs + width; x += n) {
+			for (int iy = 0; iy < n; iy++) {
+				for (y = ys + iy; y < ys + height; y += n) {
+					switch ((y - ys) / b_height) {
+					case 0:
+						str = "E40303";
+						break;
+					case 1:
+						str = "FF8C00";
+						break;
+					case 2:
+						str = "FFED00";
+						break;
+					case 3:
+						str = "008026";
+						break;
+					case 4:
+						str = "004DFF";
+						break;
+					case 5:
+						str = "750787";
+						break;
+					default:
+						exit(42);
+					}
+					s = sprintf(buf, "PX %d %d %s\n", x, y, str);
+					buf += s;
+				}
+			}
+		}
+	}
+
 	sendblock(sockfd, xs, ys, width, height, "000000");
 	while (1) {
+#if 0
 		sendblock(sockfd, xs, ys, width, b_height, "E40303");
 		sendblock(sockfd, xs, ys+b_height, width, b_height, "FF8C00");
 		sendblock(sockfd, xs, ys+b_height*2, width, b_height, "FFED00");
 		sendblock(sockfd, xs, ys+b_height*3, width, b_height, "008026");
 		sendblock(sockfd, xs, ys+b_height*4, width, b_height, "004DFF");
 		sendblock(sockfd, xs, ys+b_height*5, width, b_height, "750787");
+#endif
+		size_t size = buf - buf_orig;
+		write(sockfd, buf_orig, size);
 	}
 
 	close(sockfd);
