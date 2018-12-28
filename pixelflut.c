@@ -10,7 +10,7 @@
 #include <arpa/inet.h>
 #include <signal.h>
 
-size_t n;
+static const char *colors[] = { "E40303", "FF8C00", "FFED00", "008026", "004DFF", "750787" };
 
 void sendpx(int fd, int x, int y, const char *color)
 {
@@ -57,68 +57,58 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-//	signal(SIGPIPE, SIG_IGN);
+	signal(SIGPIPE, SIG_IGN);
 
-	int width = 777;
-	int height = 480;
+	int width = 388;
+	int height = 240;
 	int b_height = height / 6;
-	int xs = 1200;
+	int xs = 100;
 	int ys = 600;
 
-	char *buf = calloc(1 + width * height * snprintf(NULL, 0, "PX %d %d 000000\n", xs + width, ys + height), sizeof(char));
-	if (buf == NULL) {
-		fprintf(stderr, "Could not allocate memory\n");
-		exit(1);
-	}
-	char *buf_orig = buf;
-	int n = 8;
-	for (int ix = 0; ix < n; ix++) {
-		int s, x, y;
-		char *str = NULL;
-		for (x = xs + ix; x < xs + width; x += n) {
-			for (int iy = 0; iy < n; iy++) {
-				for (y = ys + iy; y < ys + height; y += n) {
-					switch ((y - ys) / b_height) {
-					case 0:
-						str = "E40303";
-						break;
-					case 1:
-						str = "FF8C00";
-						break;
-					case 2:
-						str = "FFED00";
-						break;
-					case 3:
-						str = "008026";
-						break;
-					case 4:
-						str = "004DFF";
-						break;
-					case 5:
-						str = "750787";
-						break;
-					default:
-						exit(42);
+	int sockets[6] = { 0 };
+	char *buffers[6] = { NULL };
+
+	#pragma omp parallel for
+	for (int i = 0; i < 6; i++) {
+		if ((sockets[i] = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+			fprintf(stderr, "Failed to create socket: %s\n", strerror(errno));
+			exit(1);
+		}
+		if (connect(sockets[i], server_sin, sizeof(*server_sin)) != 0) {
+			fprintf(stderr, "Could not connect: %s\n", strerror(errno));
+			exit(1);
+		}
+
+		buffers[i] = calloc(1 + width * b_height * snprintf(NULL, 0, "PX %d %d 000000\n", xs + width, ys + height), sizeof(char));
+		if (buffers[i] == NULL) {
+			fprintf(stderr, "Could not allocate memory\n");
+			exit(1);
+		}
+
+		int n = 8;
+		char *buf_tmp = buffers[i];
+		for (int ix = 0; ix < n; ix++) {
+			int s, x, y;
+			for (x = xs + ix; x < xs + width; x += n) {
+				for (int iy = 0; iy < n; iy++) {
+					for (y = ys + iy + i * b_height; y < ys + (i + 1) * b_height; y += n) {
+						s = sprintf(buffers[i], "PX %d %d %s\n", x, y, colors[i]);
+						buffers[i] += s;
 					}
-					s = sprintf(buf, "PX %d %d %s\n", x, y, str);
-					buf += s;
 				}
 			}
 		}
+		buffers[i] = buf_tmp;
 	}
 
-	sendblock(sockfd, xs, ys, width, height, "000000");
-	while (1) {
-#if 0
-		sendblock(sockfd, xs, ys, width, b_height, "E40303");
-		sendblock(sockfd, xs, ys+b_height, width, b_height, "FF8C00");
-		sendblock(sockfd, xs, ys+b_height*2, width, b_height, "FFED00");
-		sendblock(sockfd, xs, ys+b_height*3, width, b_height, "008026");
-		sendblock(sockfd, xs, ys+b_height*4, width, b_height, "004DFF");
-		sendblock(sockfd, xs, ys+b_height*5, width, b_height, "750787");
-#endif
-		size_t size = buf - buf_orig;
-		write(sockfd, buf_orig, size);
+	// sendblock(sockfd, xs, ys, width, height, "000000");
+
+	#pragma omp parallel for
+	for (int i = 0; i < 6; i++) {
+		while (1) {
+			size_t s = strlen(buffers[i]);
+			write(sockets[i], buffers[i], s);
+		}
 	}
 
 	close(sockfd);

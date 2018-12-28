@@ -1,8 +1,10 @@
 ifdef DEBUG
-	CFLAGS = -g
+	CFLAGS = -g -fopenmp
 else
-	CFLAGS = -O3
+	CFLAGS = -O3 -fopenmp
 endif
+
+LDFLAGS = -fopenmp
 
 OBJS = pixelflut
 
