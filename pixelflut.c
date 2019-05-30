@@ -11,6 +11,7 @@
 #include <signal.h>
 
 static const char *colors[] = { "E40303", "FF8C00", "FFED00", "008026", "004DFF", "750787" };
+int sockets[6] = { 0 };
 
 void sendpx(int fd, int x, int y, const char *color)
 {
@@ -24,6 +25,22 @@ void sendblock(int fd, int x, int y, int xlen, int ylen, const char *color)
 			sendpx(fd, i, j, color);
 		}
 	}
+}
+
+void setup_socket(int i, const struct sockaddr_in *server_sin)
+{
+	if (sockets[i] != 0) {
+		close(sockets[i]);
+	}
+	if ((sockets[i] = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+		fprintf(stderr, "Failed to create socket: %s\n", strerror(errno));
+		exit(1);
+	}
+	if (connect(sockets[i], server_sin, sizeof(*server_sin)) != 0) {
+		fprintf(stderr, "Could not connect: %s\n", strerror(errno));
+		exit(1);
+	}
+
 }
 
 int main(int argc, char *argv[])
@@ -59,25 +76,17 @@ int main(int argc, char *argv[])
 
 	signal(SIGPIPE, SIG_IGN);
 
-	int width = 388;
-	int height = 240;
+	int width = 194;
+	int height = 120;
 	int b_height = height / 6;
-	int xs = 100;
-	int ys = 600;
+	int xs = 1700;
+	int ys = 740;
 
-	int sockets[6] = { 0 };
 	char *buffers[6] = { NULL };
 
 	#pragma omp parallel for
 	for (int i = 0; i < 6; i++) {
-		if ((sockets[i] = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-			fprintf(stderr, "Failed to create socket: %s\n", strerror(errno));
-			exit(1);
-		}
-		if (connect(sockets[i], server_sin, sizeof(*server_sin)) != 0) {
-			fprintf(stderr, "Could not connect: %s\n", strerror(errno));
-			exit(1);
-		}
+		setup_socket(i, server_sin);
 
 		buffers[i] = calloc(1 + width * b_height * snprintf(NULL, 0, "PX %d %d 000000\n", xs + width, ys + height), sizeof(char));
 		if (buffers[i] == NULL) {
@@ -85,7 +94,7 @@ int main(int argc, char *argv[])
 			exit(1);
 		}
 
-		int n = 8;
+		int n = 4;
 		char *buf_tmp = buffers[i];
 		for (int ix = 0; ix < n; ix++) {
 			int s, x, y;
@@ -103,11 +112,13 @@ int main(int argc, char *argv[])
 
 	// sendblock(sockfd, xs, ys, width, height, "000000");
 
-	#pragma omp parallel for
-	for (int i = 0; i < 6; i++) {
-		while (1) {
+	while (1) {
+		#pragma omp parallel for
+		for (int i = 0; i < 6; i++) {
 			size_t s = strlen(buffers[i]);
-			write(sockets[i], buffers[i], s);
+			if (write(sockets[i], buffers[i], s) == 0) {
+				setup_socket(i, server_sin);
+			}
 		}
 	}
 
