@@ -34,14 +34,14 @@ void setup_socket(int i, const struct sockaddr_in *server_sin)
 		close(sockets[i]);
 	}
 	if ((sockets[i] = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		fprintf(stderr, "Failed to create socket: %s\n", strerror(errno));
+		fprintf(stderr, "Failed to create socket: %s\n",
+			strerror(errno));
 		exit(1);
 	}
 	if (connect(sockets[i], server_sin, sizeof(*server_sin)) != 0) {
 		fprintf(stderr, "Could not connect: %s\n", strerror(errno));
 		exit(1);
 	}
-
 }
 
 int main(int argc, char *argv[])
@@ -53,7 +53,8 @@ int main(int argc, char *argv[])
 
 	int sockfd;
 	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		fprintf(stderr, "Failed to create socket: %s\n", strerror(errno));
+		fprintf(stderr, "Failed to create socket: %s\n",
+			strerror(errno));
 		exit(1);
 	}
 
@@ -95,7 +96,12 @@ int main(int argc, char *argv[])
 	for (int i = 0; i < 1; i++) {
 		setup_socket(i, server_sin);
 
-		buffers[i] = calloc(1 + pf_png_height() * pf_png_width() * snprintf(NULL, 0, "PX %d %d 000000\n", xs + pf_png_width(), ys + pf_png_height()), sizeof(char));
+		buffers[i] = calloc(
+			1 + pf_png_height() * pf_png_width() *
+					snprintf(NULL, 0, "PX %d %d 000000\n",
+						 xs + pf_png_width(),
+						 ys + pf_png_height()),
+			sizeof(char));
 		if (buffers[i] == NULL) {
 			fprintf(stderr, "Could not allocate memory\n");
 			exit(1);
@@ -104,7 +110,9 @@ int main(int argc, char *argv[])
 		char *buf_tmp = buffers[i];
 		for (unsigned int x = 0; x < pf_png_width(); x++) {
 			for (unsigned int y = 0; y < pf_png_height(); y++) {
-				int s = sprintf(buffers[i], "PX %d %d %06x\n", x + xs, y + ys, pf_png_get_rgb(x, y));
+				int s = sprintf(buffers[i], "PX %d %d %06x\n",
+						x + xs, y + ys,
+						pf_png_get_rgb(x, y));
 				buffers[i] += s;
 			}
 		}
