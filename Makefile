@@ -1,14 +1,23 @@
+CC = clang
+
 ifdef DEBUG
-	CFLAGS = -g -fopenmp
+	CFLAGS = -g
 else
-	CFLAGS = -O3 -fopenmp
+	CFLAGS = -O3
 endif
 
-LDFLAGS = -fopenmp
+LDLIBS_png := `pkg-config --libs libpng`
+CFLAGS_png := `pkg-config --cflags libpng`
 
-OBJS = pixelflut
+LDLIBS += $(LDLIBS_png)
+CFLAGS += $(CFLAGS_png)
 
-all: $(OBJS)
+OBJS = pixelflut.o pf_png.o
+EXES = pixelflut
+
+all: $(EXES)
+
+pixelflut: $(OBJS)
 
 clean:
-	rm -f $(OBJS)
+	rm -f $(OBJS) $(EXES)

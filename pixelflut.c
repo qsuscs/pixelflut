@@ -10,7 +10,8 @@
 #include <arpa/inet.h>
 #include <signal.h>
 
-static const char *colors[] = { "E40303", "FF8C00", "FFED00", "008026", "004DFF", "750787" };
+#include "pf_png.h"
+
 int sockets[6] = { 0 };
 
 void sendpx(int fd, int x, int y, const char *color)
@@ -45,8 +46,8 @@ void setup_socket(int i, const struct sockaddr_in *server_sin)
 
 int main(int argc, char *argv[])
 {
-	if (argc != 3) {
-		fprintf(stderr, "Usage: %s <IP> <PORT>\n", argv[0]);
+	if (argc != 4) {
+		fprintf(stderr, "Usage: %s <IP> <PORT> <FILE>\n", argv[0]);
 		exit(1);
 	}
 
@@ -76,45 +77,49 @@ int main(int argc, char *argv[])
 
 	signal(SIGPIPE, SIG_IGN);
 
-	int width = 194;
-	int height = 120;
-	int b_height = height / 6;
-	int xs = 1700;
-	int ys = 740;
+	if (pf_png_open(argv[3])) {
+		fprintf(stderr, "Failed to open file\n");
+		exit(1);
+	}
+
+	if (pf_png_read()) {
+		fprintf(stderr, "Failed to read file\n");
+		exit(1);
+	}
+
+	int xs = 100;
+	int ys = 100;
 
 	char *buffers[6] = { NULL };
 
-	#pragma omp parallel for
-	for (int i = 0; i < 6; i++) {
+	for (int i = 0; i < 1; i++) {
 		setup_socket(i, server_sin);
 
-		buffers[i] = calloc(1 + width * b_height * snprintf(NULL, 0, "PX %d %d 000000\n", xs + width, ys + height), sizeof(char));
+		buffers[i] = calloc(1 + pf_png_height() * pf_png_width() * snprintf(NULL, 0, "PX %d %d 000000\n", xs + pf_png_width(), ys + pf_png_height()), sizeof(char));
 		if (buffers[i] == NULL) {
 			fprintf(stderr, "Could not allocate memory\n");
 			exit(1);
 		}
 
-		int n = 4;
 		char *buf_tmp = buffers[i];
-		for (int ix = 0; ix < n; ix++) {
-			int s, x, y;
-			for (x = xs + ix; x < xs + width; x += n) {
-				for (int iy = 0; iy < n; iy++) {
-					for (y = ys + iy + i * b_height; y < ys + (i + 1) * b_height; y += n) {
-						s = sprintf(buffers[i], "PX %d %d %s\n", x, y, colors[i]);
-						buffers[i] += s;
-					}
-				}
+		for (unsigned int x = 0; x < pf_png_width(); x++) {
+			for (unsigned int y = 0; y < pf_png_height(); y++) {
+				int s = sprintf(buffers[i], "PX %d %d %06x\n", x + xs, y + ys, pf_png_get_rgb(x, y));
+				buffers[i] += s;
 			}
 		}
 		buffers[i] = buf_tmp;
 	}
 
-	// sendblock(sockfd, xs, ys, width, height, "000000");
+	// sendblock(sockfd, xs, ys, pf_png_width(), pf_png_height(), "000000");
+
+	if (pf_png_close()) {
+		fprintf(stderr, "Could not close file\n");
+		exit(1);
+	}
 
 	while (1) {
-		#pragma omp parallel for
-		for (int i = 0; i < 6; i++) {
+		for (int i = 0; i < 1; i++) {
 			size_t s = strlen(buffers[i]);
 			if (write(sockets[i], buffers[i], s) == 0) {
 				setup_socket(i, server_sin);
