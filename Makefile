@@ -12,7 +12,7 @@ CFLAGS_png := `pkg-config --cflags libpng`
 LDLIBS += $(LDLIBS_png)
 CFLAGS += $(CFLAGS_png)
 
-OBJS = pixelflut.o pf_png.o
+OBJS = pixelflut.o pf_png.o socket.o
 EXES = pixelflut
 
 all: $(EXES)

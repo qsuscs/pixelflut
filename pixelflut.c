@@ -12,6 +12,7 @@
 #include <getopt.h>
 
 #include "pf_png.h"
+#include "socket.h"
 
 static const struct option options_long[] = {
 	{ "host", required_argument, NULL, 'h' },
@@ -34,20 +35,6 @@ void usage(const char *name)
 		"-x|--xpos <num>\n"
 		"-y|--ypos <num>\n",
 		name);
-}
-
-void sendpx(int fd, int x, int y, const char *color)
-{
-	dprintf(fd, "PX %d %d %s\n", x, y, color);
-}
-
-void sendblock(int fd, int x, int y, int xlen, int ylen, const char *color)
-{
-	for (int j = y; j < ylen + y; j++) {
-		for (int i = x; i < xlen + x; i++) {
-			sendpx(fd, i, j, color);
-		}
-	}
 }
 
 int main(int argc, char *argv[])
@@ -88,15 +75,9 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
 		exit(1);
 	}
-	int sockfd;
-	if ((sockfd = socket(res->ai_family, SOCK_STREAM, 0)) == -1) {
-		fprintf(stderr, "Failed to create socket: %s\n",
-			strerror(errno));
-		exit(1);
-	}
 
-	if (connect(sockfd, res->ai_addr, res->ai_addrlen) != 0) {
-		fprintf(stderr, "Could not connect: %s\n", strerror(errno));
+	if (pf_socket_setup(res, 1) < 0) {
+		fprintf(stderr, "Error in pf_socket_setup()\n");
 		exit(1);
 	}
 
@@ -132,8 +113,6 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	// sendblock(sockfd, xs, ys, pf_png_width(), pf_png_height(), "000000");
-
 	if (pf_png_close()) {
 		fprintf(stderr, "Could not close file\n");
 		exit(1);
@@ -141,13 +120,8 @@ int main(int argc, char *argv[])
 
 	size_t s = strlen(buffer);
 
-	while (1) {
-		if (write(sockfd, buffer, s) == 0) {
-			break;
-		}
-	}
-
-	close(sockfd);
+	pf_socket_loop_write(buffer, s);
+	pf_socket_destroy();
 
 	return 0;
 }
