@@ -9,10 +9,32 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <signal.h>
+#include <getopt.h>
 
 #include "pf_png.h"
 
-int sockets[6] = { 0 };
+static const struct option options_long[] = {
+	{ "host", required_argument, NULL, 'h' },
+	{ "port", required_argument, NULL, 'p' },
+	{ "image", required_argument, NULL, 'i' },
+	{ "xpos", required_argument, NULL, 'x' },
+	{ "ypos", required_argument, NULL, 'y' },
+	{ NULL, 0, NULL, 0 }
+};
+static const char *optstring = "h:p:i:x:y:";
+
+void usage(const char *name)
+{
+	fprintf(stderr,
+		"Usage: %s [options]\n"
+		"\n"
+		"-h|--host <host> (required)\n"
+		"-p|--port <port> (required)\n"
+		"-i|--image <file.png> (required)\n"
+		"-x|--xpos <num>\n"
+		"-y|--ypos <num>\n",
+		name);
+}
 
 void sendpx(int fd, int x, int y, const char *color)
 {
@@ -28,57 +50,59 @@ void sendblock(int fd, int x, int y, int xlen, int ylen, const char *color)
 	}
 }
 
-void setup_socket(int i, const struct sockaddr_in *server_sin)
-{
-	if (sockets[i] != 0) {
-		close(sockets[i]);
-	}
-	if ((sockets[i] = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-		fprintf(stderr, "Failed to create socket: %s\n",
-			strerror(errno));
-		exit(1);
-	}
-	if (connect(sockets[i], server_sin, sizeof(*server_sin)) != 0) {
-		fprintf(stderr, "Could not connect: %s\n", strerror(errno));
-		exit(1);
-	}
-}
-
 int main(int argc, char *argv[])
 {
-	if (argc != 4) {
-		fprintf(stderr, "Usage: %s <IP> <PORT> <FILE>\n", argv[0]);
+	int c;
+	char *host = NULL;
+	char *service = NULL;
+	char *image = NULL;
+	int xs = 0, ys = 0;
+	while ((c = getopt_long(argc, argv, optstring, options_long, NULL)) !=
+	       -1) {
+		switch (c) {
+		case 'h':
+			host = optarg;
+			break;
+		case 'p':
+			service = optarg;
+			break;
+		case 'i':
+			image = optarg;
+			break;
+		case 'x':
+			xs = atoi(optarg);
+			break;
+		case 'y':
+			ys = atoi(optarg);
+			break;
+		default:
+			usage(argv[0]);
+			exit(1);
+		}
+	}
+	struct addrinfo hints = { 0, AF_UNSPEC, SOCK_STREAM, 0,
+				  0, NULL,	NULL,	     NULL };
+	struct addrinfo *res = NULL;
+	int err;
+	if ((err = getaddrinfo(host, service, &hints, &res))) {
+		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
 		exit(1);
 	}
-
 	int sockfd;
-	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+	if ((sockfd = socket(res->ai_family, SOCK_STREAM, 0)) == -1) {
 		fprintf(stderr, "Failed to create socket: %s\n",
 			strerror(errno));
 		exit(1);
 	}
 
-	int portno = atoi(argv[2]);
-
-	struct in_addr *server_ina = malloc(sizeof(struct in_addr));
-	if (inet_pton(AF_INET, argv[1], server_ina) != 1) {
-		fprintf(stderr, "Could not parse address %s\n", argv[1]);
-		exit(1);
-	}
-
-	struct sockaddr_in *server_sin = calloc(1, sizeof(struct sockaddr_in));
-	server_sin->sin_family = AF_INET;
-	server_sin->sin_port = htons(portno);
-	server_sin->sin_addr = *server_ina;
-
-	if (connect(sockfd, server_sin, sizeof(*server_sin)) != 0) {
+	if (connect(sockfd, res->ai_addr, res->ai_addrlen) != 0) {
 		fprintf(stderr, "Could not connect: %s\n", strerror(errno));
 		exit(1);
 	}
 
 	signal(SIGPIPE, SIG_IGN);
 
-	if (pf_png_open(argv[3])) {
+	if (pf_png_open(image)) {
 		fprintf(stderr, "Failed to open file\n");
 		exit(1);
 	}
@@ -88,35 +112,24 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	int xs = 100;
-	int ys = 100;
+	char *buffer =
+		calloc(1 + pf_png_height() * pf_png_width() *
+				       snprintf(NULL, 0, "PX %d %d 000000\n",
+						xs + pf_png_width(),
+						ys + pf_png_height()),
+		       sizeof(char));
+	if (buffer == NULL) {
+		fprintf(stderr, "Could not allocate memory\n");
+		exit(1);
+	}
 
-	char *buffers[6] = { NULL };
-
-	for (int i = 0; i < 1; i++) {
-		setup_socket(i, server_sin);
-
-		buffers[i] = calloc(
-			1 + pf_png_height() * pf_png_width() *
-					snprintf(NULL, 0, "PX %d %d 000000\n",
-						 xs + pf_png_width(),
-						 ys + pf_png_height()),
-			sizeof(char));
-		if (buffers[i] == NULL) {
-			fprintf(stderr, "Could not allocate memory\n");
-			exit(1);
+	char *p = buffer;
+	for (unsigned int x = 0; x < pf_png_width(); x++) {
+		for (unsigned int y = 0; y < pf_png_height(); y++) {
+			int s = sprintf(p, "PX %d %d %06x\n", x + xs, y + ys,
+					pf_png_get_rgb(x, y));
+			p += s;
 		}
-
-		char *buf_tmp = buffers[i];
-		for (unsigned int x = 0; x < pf_png_width(); x++) {
-			for (unsigned int y = 0; y < pf_png_height(); y++) {
-				int s = sprintf(buffers[i], "PX %d %d %06x\n",
-						x + xs, y + ys,
-						pf_png_get_rgb(x, y));
-				buffers[i] += s;
-			}
-		}
-		buffers[i] = buf_tmp;
 	}
 
 	// sendblock(sockfd, xs, ys, pf_png_width(), pf_png_height(), "000000");
@@ -126,12 +139,11 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+	size_t s = strlen(buffer);
+
 	while (1) {
-		for (int i = 0; i < 1; i++) {
-			size_t s = strlen(buffers[i]);
-			if (write(sockets[i], buffers[i], s) == 0) {
-				setup_socket(i, server_sin);
-			}
+		if (write(sockfd, buffer, s) == 0) {
+			break;
 		}
 	}
 
